@@ -1,5 +1,7 @@
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import static java.nio.file.StandardWatchEventKinds.*;
 import java.util.stream.Stream;
@@ -9,18 +11,20 @@ public class Task4 {
     public static void main(String[] args) {
         Path directoryPath = Paths.get("watch");
 
-
         try{
             WatchService watchService = FileSystems.getDefault().newWatchService();
 
             directoryPath.register(watchService, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
-            HashMap<String, List<String>> oldFiles = readFiles(directoryPath);
 
             System.out.println("Наблюдение за каталогом началось...");
+
+            HashMap<String, List<String>> oldFiles = readFiles(directoryPath);
+            HashMap<String, Integer> oldFilesSize = getFilesSize(directoryPath);
 
             while (true) {
 
                 WatchKey key;
+
                 try {
                     key = watchService.take(); // Ожидание события
                 } catch (InterruptedException ex) {
@@ -31,6 +35,8 @@ public class Task4 {
                 // Обрабатываем события
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
+                    System.out.println(kind.name());
+
 
                     // Убедитесь, что это событие не является утерянным
                     if (kind == StandardWatchEventKinds.OVERFLOW) {
@@ -45,47 +51,33 @@ public class Task4 {
                         String name = filename.toString().replace("~", "");
 
                         Path filePath = directoryPath.resolve(name);
-
                         // Сравниваем старое и новое состояние файла
                         List<String> newFile = Files.readAllLines(filePath);
                         List<String> oldFile = oldFiles.get(filePath.toString());
 
-                        // Создаем копии списков для симметрической разности
-                        List<String> addLines = new ArrayList<>(newFile);
-                        List<String> delLines = new ArrayList<>(oldFile);
+//                        newFile.forEach(System.out::println);
+//                        System.out.println();
 
-                        // Удаляем из difference1 элементы, которые есть в list2 (разность list1 - list2)
-                        addLines.removeAll(oldFile);
+                        var addedAndRemovedString = FileHelper.addedAndRemovedStrings(
+                                oldFile,
+                                newFile
+                        );
+                        // Определяем добавленные и удаленные строки
 
-                        System.out.println();
-                        System.out.println("addLines");
-                        addLines.forEach(System.out::println);
-                        System.out.println();
-                        System.out.println("New");
-                        newFile.forEach(System.out::println);
-                        System.out.println();
-                        System.out.println("Old");
-                        oldFile.forEach(System.out::println);
-
-                        // Удаляем из difference2 элементы, которые есть в list1 (разность list2 - list1)
-                        delLines.removeAll(newFile);
-
-//                        // Определяем добавленные и удаленные строки
-//
-//                        // Выводим изменения
-//                        if (!addLines.isEmpty()) {
+                        // Выводим изменения
+//                        if (!addedAndRemovedString.getFirst().isEmpty()) {
 //                            System.out.println();
 //                            System.out.println("Добавленные строки:");
-//                            addLines.forEach(System.out::println);
+//                            addedAndRemovedString.getFirst().forEach(System.out::println);
 //                        }
 //
-//                        if (!delLines.isEmpty()) {
+//                        if (!addedAndRemovedString.get(1).isEmpty()) {
 //                            System.out.println();
 //                            System.out.println("Удаленные строки:");
-//                            delLines.forEach(System.out::println);
+//                            addedAndRemovedString.get(1).forEach(System.out::println);
 //                        }
 
-                        oldFiles.put(filePath.toString(), newFile);
+                        oldFiles.put(filePath.toString(),newFile);
 
                     }else if (kind == ENTRY_CREATE) {
                         // Получаем имя нового файла
@@ -98,7 +90,24 @@ public class Task4 {
                             if (Files.isRegularFile(createPath)){
                                 System.out.println();
                                 System.out.printf("Создан новый файл: %s%n", filename);
+
+                                oldFiles = readFiles(directoryPath);
+                                oldFilesSize = getFilesSize(directoryPath);
                             }
+                        }
+
+                    }else if (kind == ENTRY_DELETE) {
+                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
+                        Path filename = ev.context();
+                        Path filePath = directoryPath.resolve(filename);
+
+                        if (!filename.toString().contains("~")){
+                            System.out.println("Размер файла: " + oldFilesSize.get(filePath.toString()) + " байт");
+
+                            System.out.println("Контрольная сумма: "+Task3.getCheckSum(oldFiles.get(filePath.toString())));
+
+                            oldFiles = readFiles(directoryPath);
+                            oldFilesSize = getFilesSize(directoryPath);
                         }
                     }
                 }
@@ -111,6 +120,8 @@ public class Task4 {
             }
 
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
 
@@ -125,7 +136,11 @@ public class Task4 {
                         try {
                             List<String> content = Files.readAllLines(filePath);
 
-                            fileContents.put(filePath.toString(),content);
+                            if (content.isEmpty()) {
+                                fileContents.put(filePath.toString(), new ArrayList<>());
+                            }else{
+                                fileContents.put(filePath.toString(),content);
+                            }
                         } catch (IOException e) {
                             System.err.println("Ошибка при чтении файла" + filePath + ": " + e.getMessage());
                         }
@@ -135,5 +150,22 @@ public class Task4 {
         }
 
         return fileContents;
+    }
+
+    public static HashMap<String, Integer> getFilesSize(Path folderPath) {
+        HashMap<String, Integer> fileSizes = new HashMap<>();
+
+        try (Stream<Path> paths = Files.list(folderPath)) {
+            paths.filter(Files::isRegularFile) // Отфильтровываем только файлы
+                    .forEach(filePath -> {
+                        File file = new File(filePath.toString());
+
+                        fileSizes.put(filePath.toString(), (int) file.length());
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return fileSizes;
     }
 }
