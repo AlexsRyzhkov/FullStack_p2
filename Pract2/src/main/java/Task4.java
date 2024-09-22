@@ -22,7 +22,6 @@ public class Task4 {
             HashMap<String, Integer> oldFilesSize = getFilesSize(directoryPath);
 
             while (true) {
-
                 WatchKey key;
 
                 try {
@@ -32,99 +31,78 @@ public class Task4 {
                     return;
                 }
 
-                // Обрабатываем события
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
+
                     System.out.println(kind.name());
 
-
-                    // Убедитесь, что это событие не является утерянным
                     if (kind == StandardWatchEventKinds.OVERFLOW) {
                         continue;
                     }
 
-                    // Проверяем, что событие является изменением файла
-                    if (kind == ENTRY_MODIFY) {
-                        // Получаем имя измененного файла
-                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                        Path filename = ev.context();
-                        String name = filename.toString().replace("~", "");
+                    WatchEvent<Path> ev = (WatchEvent<Path>) event;
+                    Path filename = ev.context();
+                    String name = filename.toString().replace("~", "");
+                    Path filePath = directoryPath.resolve(name);
 
-                        Path filePath = directoryPath.resolve(name);
-                        // Сравниваем старое и новое состояние файла
+                    if (kind == ENTRY_MODIFY) {
+
                         List<String> newFile = Files.readAllLines(filePath);
                         List<String> oldFile = oldFiles.get(filePath.toString());
 
-//                        newFile.forEach(System.out::println);
-//                        System.out.println();
+                        if ((Task3.getCheckSum(newFile) == Task3.getCheckSum(oldFile))){
+                            continue;
+                        }
 
                         var addedAndRemovedString = FileHelper.addedAndRemovedStrings(
                                 oldFile,
                                 newFile
                         );
-                        // Определяем добавленные и удаленные строки
 
-                        // Выводим изменения
-//                        if (!addedAndRemovedString.getFirst().isEmpty()) {
-//                            System.out.println();
-//                            System.out.println("Добавленные строки:");
-//                            addedAndRemovedString.getFirst().forEach(System.out::println);
-//                        }
-//
-//                        if (!addedAndRemovedString.get(1).isEmpty()) {
-//                            System.out.println();
-//                            System.out.println("Удаленные строки:");
-//                            addedAndRemovedString.get(1).forEach(System.out::println);
-//                        }
-
-                        oldFiles.put(filePath.toString(),newFile);
-
-                    }else if (kind == ENTRY_CREATE) {
-                        // Получаем имя нового файла
-                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                        Path filename = ev.context();
-
-                        if (!filename.toString().contains("~")){
-                            Path createPath = directoryPath.resolve(filename);
-
-                            if (Files.isRegularFile(createPath)){
-                                System.out.println();
-                                System.out.printf("Создан новый файл: %s%n", filename);
-
-                                oldFiles = readFiles(directoryPath);
-                                oldFilesSize = getFilesSize(directoryPath);
-                            }
+                        if (!addedAndRemovedString.getFirst().isEmpty()) {
+                            System.out.println();
+                            System.out.println("Добавленные строки:");
+                            addedAndRemovedString.getFirst().forEach(System.out::println);
                         }
 
-                    }else if (kind == ENTRY_DELETE) {
-                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                        Path filename = ev.context();
-                        Path filePath = directoryPath.resolve(filename);
+                        if (!addedAndRemovedString.get(1).isEmpty()) {
+                            System.out.println();
+                            System.out.println("Удаленные строки:");
+                            addedAndRemovedString.get(1).forEach(System.out::println);
+                        }
 
-                        if (!filename.toString().contains("~")){
+                        oldFiles.put(filePath.toString(),newFile);
+                        oldFilesSize.put(filePath.toString(), (int) (new File(filePath.toString())).length());
+                    }
+
+                    if (!filename.toString().contains("~")){
+
+                        if (kind == ENTRY_CREATE && Files.isRegularFile(filePath)){
+                            System.out.println();
+                            System.out.printf("Создан новый файл: %s%n", filename);
+
+                            oldFiles.put(filePath.toString(),Files.readAllLines(filePath));
+                            oldFilesSize.put(filePath.toString(), (int) (new File(filePath.toString())).length());
+                        }
+
+                        if (kind == ENTRY_DELETE){
                             System.out.println("Размер файла: " + oldFilesSize.get(filePath.toString()) + " байт");
-
                             System.out.println("Контрольная сумма: "+Task3.getCheckSum(oldFiles.get(filePath.toString())));
-
-                            oldFiles = readFiles(directoryPath);
-                            oldFilesSize = getFilesSize(directoryPath);
+                            oldFiles.remove(filePath.toString());
+                            oldFilesSize.remove(filePath.toString());
                         }
                     }
                 }
 
-                // Сбрасываем ключ и проверяем, доступен ли он для дальнейшего отслеживания
                 boolean valid = key.reset();
                 if (!valid) {
                     break;
                 }
             }
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchAlgorithmException e) {
+        } catch (IOException | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
-
     }
 
     public static HashMap<String, List<String>> readFiles(Path folderPath) {
@@ -136,11 +114,7 @@ public class Task4 {
                         try {
                             List<String> content = Files.readAllLines(filePath);
 
-                            if (content.isEmpty()) {
-                                fileContents.put(filePath.toString(), new ArrayList<>());
-                            }else{
-                                fileContents.put(filePath.toString(),content);
-                            }
+                            fileContents.put(filePath.toString(), Objects.requireNonNullElseGet(content, ArrayList::new));
                         } catch (IOException e) {
                             System.err.println("Ошибка при чтении файла" + filePath + ": " + e.getMessage());
                         }
