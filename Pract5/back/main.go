@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"io"
 	"log"
 	"net/http"
@@ -11,9 +12,10 @@ import (
 
 func main() {
 	e := echo.New()
+	e.Use(middleware.CORS())
 
 	e.GET("/files", func(c echo.Context) error {
-		dirPath := "./files"
+		dirPath := "./upload"
 
 		files, err := os.ReadDir(dirPath)
 		if err != nil {
@@ -32,10 +34,10 @@ func main() {
 	e.GET("/files/:name", func(c echo.Context) error {
 		fileName := c.Param("name")
 
-		return c.File("./files/" + fileName)
+		return c.File("./upload/" + fileName)
 	})
 
-	e.POST("/upload", func(c echo.Context) error {
+	e.POST("/files", func(c echo.Context) error {
 		file, err := c.FormFile("file")
 
 		if err != nil {
@@ -45,7 +47,7 @@ func main() {
 
 		src, err := file.Open()
 		defer src.Close()
-		dst, err := os.Create("./files/" + uuid4.String() + "_" + file.Filename)
+		dst, err := os.Create("./upload/" + uuid4.String() + "_" + file.Filename)
 		defer dst.Close()
 
 		if _, err = io.Copy(dst, src); err != nil {

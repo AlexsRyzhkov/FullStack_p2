@@ -1,8 +1,10 @@
-import axios from "axios";
+import axios from 'axios';
+
+export const SERVER_URL = 'http://localhost:80/files/';
 
 const $axios = axios.create({
-    baseURL: 'http:/localhost:6000',
-    timeout: 10000,
+	baseURL: 'http://localhost:80',
+	timeout: 10000,
 });
 
-export {$axios}
+export { $axios };
