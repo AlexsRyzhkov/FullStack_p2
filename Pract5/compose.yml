@@ -1,0 +1,24 @@
+
+
+services:
+
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+
+  front:
+    image: node:latest
+    working_dir: /var/app
+    volumes:
+      - ./front:/var/app
+    command: npm i &&  npm run dev
+
+  app1:
+    image: golang
+    working_dir: /var/app
+    volumes:
+      - ./back:/var/app
+    command: go run ./main.go
